@@ -2,6 +2,8 @@
 import json
 import logging
 import math
+import re
+import time
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from core.schemas import IncidentPostmortem, ServiceGraphNode
@@ -10,15 +12,16 @@ logger = logging.getLogger(__name__)
 
 
 def _cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
-    """Computes cosine similarity between two float vectors."""
+    """Computes cosine similarity between two float vectors with float precision clamping."""
     if not vec1 or not vec2 or len(vec1) != len(vec2):
         return 0.0
     dot = sum(a * b for a, b in zip(vec1, vec2))
     norm_a = math.sqrt(sum(a * a for a in vec1))
     norm_b = math.sqrt(sum(b * b for b in vec2))
-    if norm_a == 0.0 or norm_b == 0.0:
+    if norm_a == 0.0 or norm_b == 0.0 or math.isnan(norm_a) or math.isnan(norm_b):
         return 0.0
-    return dot / (norm_a * norm_b)
+    sim = dot / (norm_a * norm_b)
+    return max(-1.0, min(1.0, sim))
 
 
 class SurrealMemoryStore:
@@ -81,9 +84,13 @@ class SurrealMemoryStore:
                 items = result if isinstance(result, list) else []
                 if items and isinstance(items[0], dict) and "result" in items[0]:
                     items = items[0]["result"]
+                if not isinstance(items, list):
+                    items = []
 
                 postmortems = []
                 for p in items:
+                    if not isinstance(p, dict):
+                        continue
                     postmortems.append(
                         IncidentPostmortem(
                             incident_id=p.get("incident_id", "INC-000"),
@@ -108,6 +115,11 @@ class SurrealMemoryStore:
     def get_service_dependencies(self, service_id: str, direction: str = "out") -> List[str]:
         """Performs directional graph traversal (->depends_on-> downstream or <-depends_on<- upstream)."""
         clean_id = service_id if service_id.startswith("service:") else f"service:{service_id}"
+        # Validate identifier format to prevent query injection
+        if not re.match(r"^[a-zA-Z0-9_\-:]+$", clean_id):
+            logger.warning(f"Invalid service identifier rejected: {service_id}")
+            return []
+
         if self._db is not None:
             try:
                 if direction == "in":
@@ -121,9 +133,13 @@ class SurrealMemoryStore:
                 items = result if isinstance(result, list) else []
                 if items and isinstance(items[0], dict) and "result" in items[0]:
                     items = items[0]["result"]
+                if not isinstance(items, list):
+                    items = []
 
                 deps: List[str] = []
                 for item in items:
+                    if not isinstance(item, dict):
+                        continue
                     vals = item.get("callers" if direction == "in" else "deps", [])
                     if isinstance(vals, list):
                         deps.extend(vals)
@@ -144,16 +160,19 @@ class SurrealMemoryStore:
         downstream = self.get_service_dependencies(clean_id, direction="out")
         upstream = self.get_service_dependencies(clean_id, direction="in")
 
-        total_impacted = len(upstream) + 1
-        critical_services = {"auth-gateway", "payment-vault", "user-db"}
-        has_critical = any(s in critical_services for s in [svc_name] + upstream)
+        # Deduplicate upstream callers and exclude self to avoid double counting
+        unique_upstream = list(set(upstream) - {svc_name})
+        total_impacted = len(unique_upstream) + 1
 
-        score = min(1.0, 0.35 + (0.30 * len(upstream)) + (0.10 * len(downstream)))
+        critical_services = {"auth-gateway", "payment-vault", "user-db"}
+        has_critical = any(s in critical_services for s in [svc_name] + unique_upstream)
+
+        score = min(1.0, 0.35 + (0.30 * len(unique_upstream)) + (0.10 * len(downstream)))
 
         return {
             "target_service": svc_name,
             "downstream_dependencies": downstream,
-            "upstream_impacted_services": upstream,
+            "upstream_impacted_services": unique_upstream,
             "total_impacted_services": total_impacted,
             "criticality": "CRITICAL" if has_critical else "MEDIUM",
             "blast_radius_score": round(score, 2),
@@ -163,9 +182,9 @@ class SurrealMemoryStore:
         """Persists verified incident postmortem into SurrealDB postmortem table."""
         if self._db is not None:
             try:
-                record_id = f"postmortem:{postmortem.incident_id}"
                 data = postmortem.model_dump()
-                self._db.upsert(record_id, data)
+                query = "UPSERT type::thing('postmortem', $id) MERGE $data;"
+                self._db.query(query, {"id": postmortem.incident_id, "data": data})
                 return True
             except Exception as e:
                 logger.warning(f"SurrealDB live save_postmortem failed: {e}. Saving to fallback.")
@@ -182,7 +201,7 @@ class SurrealMemoryStore:
                 items = result if isinstance(result, list) else []
                 if items and isinstance(items[0], dict) and "result" in items[0]:
                     items = items[0]["result"]
-                if items:
+                if items and isinstance(items[0], dict):
                     s = items[0]
                     return {
                         "engineer_name": s.get("engineer_name", "On-Call SRE"),
@@ -201,7 +220,7 @@ class SurrealMemoryStore:
         if self._db is not None:
             try:
                 if service_name:
-                    query = "SELECT * FROM uncertainty WHERE (service = $svc OR status = 'OPEN');"
+                    query = "SELECT * FROM uncertainty WHERE status = 'OPEN' AND service = $svc;"
                     result = self._db.query(query, {"svc": service_name})
                 else:
                     query = "SELECT * FROM uncertainty WHERE status = 'OPEN';"
@@ -210,7 +229,7 @@ class SurrealMemoryStore:
                 items = result if isinstance(result, list) else []
                 if items and isinstance(items[0], dict) and "result" in items[0]:
                     items = items[0]["result"]
-                return items
+                return items if isinstance(items, list) else []
             except Exception as e:
                 logger.warning(f"SurrealDB uncertainty query failed: {e}. Falling back.")
 
@@ -222,7 +241,9 @@ class SurrealMemoryStore:
         if self._db is not None:
             try:
                 uid = uncertainty.get("id") or f"uncertainty:{int(time.time())}"
-                self._db.upsert(uid, uncertainty)
+                clean_uid = uid.replace("uncertainty:", "")
+                query = "UPSERT type::thing('uncertainty', $id) MERGE $data;"
+                self._db.query(query, {"id": clean_uid, "data": uncertainty})
                 return True
             except Exception as e:
                 logger.warning(f"SurrealDB live save_uncertainty failed: {e}.")
@@ -294,7 +315,7 @@ class MockSurrealMemoryStore(SurrealMemoryStore):
         for s in self._data.get("services", []):
             if s["id"] == cleaned:
                 return [dep.replace("service:", "") for dep in s.get("depends_on", [])]
-        return ["redis-cluster", "user-db"]
+        return []
 
     def calculate_blast_radius(self, service_id: str) -> Dict[str, Any]:
         cleaned = service_id if service_id.startswith("service:") else f"service:{service_id}"
@@ -303,16 +324,18 @@ class MockSurrealMemoryStore(SurrealMemoryStore):
         downstream = self.get_service_dependencies(cleaned, direction="out")
         upstream = self.get_service_dependencies(cleaned, direction="in")
 
-        total_impacted = len(upstream) + 1
-        critical_services = {"auth-gateway", "payment-vault", "user-db"}
-        has_critical = any(s in critical_services for s in [svc_name] + upstream)
+        unique_upstream = list(set(upstream) - {svc_name})
+        total_impacted = len(unique_upstream) + 1
 
-        score = min(1.0, 0.35 + (0.30 * len(upstream)) + (0.10 * len(downstream)))
+        critical_services = {"auth-gateway", "payment-vault", "user-db"}
+        has_critical = any(s in critical_services for s in [svc_name] + unique_upstream)
+
+        score = min(1.0, 0.35 + (0.30 * len(unique_upstream)) + (0.10 * len(downstream)))
 
         return {
             "target_service": svc_name,
             "downstream_dependencies": downstream,
-            "upstream_impacted_services": upstream,
+            "upstream_impacted_services": unique_upstream,
             "total_impacted_services": total_impacted,
             "criticality": "CRITICAL" if has_critical else "MEDIUM",
             "blast_radius_score": round(score, 2),
@@ -320,7 +343,6 @@ class MockSurrealMemoryStore(SurrealMemoryStore):
 
     def save_postmortem(self, postmortem: IncidentPostmortem) -> bool:
         self._data.setdefault("postmortems", [])
-        # Check if already present to update or append
         for idx, existing in enumerate(self._data["postmortems"]):
             if existing.get("incident_id") == postmortem.incident_id:
                 self._data["postmortems"][idx] = postmortem.model_dump()
@@ -348,8 +370,8 @@ class MockSurrealMemoryStore(SurrealMemoryStore):
     def query_open_uncertainties(self, service_name: Optional[str] = None) -> List[Dict[str, Any]]:
         uncertainties = self._data.get("uncertainties", [])
         if service_name:
-            return [u for u in uncertainties if u.get("service") == service_name or u.get("status") == "OPEN"]
-        return uncertainties
+            return [u for u in uncertainties if u.get("status") == "OPEN" and u.get("service") == service_name]
+        return [u for u in uncertainties if u.get("status") == "OPEN"]
 
     def save_uncertainty(self, uncertainty: Dict[str, Any]) -> bool:
         self._data.setdefault("uncertainties", [])

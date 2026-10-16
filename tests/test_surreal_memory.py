@@ -134,3 +134,48 @@ def test_surreal_live_client_mock_sdk():
         assert results[0].incident_id == "INC-777"
         mock_db.query.assert_called_once()
 
+        # Test live save_postmortem uses parameterized UPSERT query
+        pm = IncidentPostmortem(
+            incident_id="INC-888",
+            service_name="auth-gateway",
+            root_cause="OOM",
+            resolution_diff="fix",
+            verified_in_daytona=True,
+        )
+        assert store.save_postmortem(pm) is True
+        last_query = mock_db.query.call_args[0][0]
+        assert "UPSERT type::thing('postmortem'" in last_query
+
+        # Test live save_uncertainty uses parameterized UPSERT query
+        u = {"id": "uncertainty:999", "service": "auth-gateway", "observation": "test", "status": "OPEN"}
+        assert store.save_uncertainty(u) is True
+        last_query_u = mock_db.query.call_args[0][0]
+        assert "UPSERT type::thing('uncertainty'" in last_query_u
+
+
+def test_surreal_unknown_service_and_sanitization():
+    store = MockSurrealMemoryStore()
+    # Unknown service must return empty list (not phantom defaults)
+    assert store.get_service_dependencies("service:nonexistent-microservice") == []
+
+    # Invalid characters rejected
+    live_store = SurrealMemoryStore()
+    assert live_store.get_service_dependencies("service:bad;DROP TABLE service;") == []
+
+
+def test_surreal_uncertainty_filtering_exact_service():
+    store = MockSurrealMemoryStore()
+    # Add an uncertainty for user-db
+    store.save_uncertainty({
+        "id": "uncertainty:userdb-1",
+        "service": "user-db",
+        "observation": "Lock timeout on accounts table.",
+        "status": "OPEN",
+    })
+
+    # Query for auth-gateway only -> must NOT contain user-db
+    auth_uncertainties = store.query_open_uncertainties("auth-gateway")
+    assert all(u["service"] == "auth-gateway" for u in auth_uncertainties)
+    assert not any(u["service"] == "user-db" for u in auth_uncertainties)
+
+
