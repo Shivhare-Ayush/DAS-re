@@ -1,4 +1,4 @@
-# 🛡️ Aegis: Autonomous Voice SRE & Zero-Trust Cloud Operator
+# 🛡️ DAS-re: Autonomous Voice SRE & Zero-Trust Cloud Operator
 
 > **Daytona HackSprint #6** — Friday, October 16, 2026 @ JFK27 Basement, 12 W 39th St, New York, NY  
 > Built by **Ayush Shivhare, Sampat & Team**
