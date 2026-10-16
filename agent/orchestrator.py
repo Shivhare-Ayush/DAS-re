@@ -102,24 +102,24 @@ class AegisOrchestrator:
                 span, verified_test.exit_code, verified_test.stdout, verified_test.duration_ms
             )
 
-        # 4. Clean Teardown
-        self.sandbox.destroy_workspace(ws.workspace_id)
-
-        # 5. Save verified postmortem with Phoenix trace lineage to SurrealDB
-        postmortem = IncidentPostmortem(
+        # 4. Daytona Teardown Hook: Generate Structured Incident Report for SurrealDB Intake
+        postmortem = self.generate_incident_report(
             incident_id=incident_id,
             service_name="auth-gateway",
             root_cause="Redis lock starvation under peak traffic",
-            resolution_diff=patch_code,
-            verified_in_daytona=verified_test.passed,
-            phoenix_trace_id=trace_meta.get("phoenix_trace_id"),
-            phoenix_span_id=trace_meta.get("phoenix_span_id"),
-            phoenix_ui_url=trace_meta.get("phoenix_ui_url"),
-            guardrail_verdict="PASS",
+            patch_code=patch_code,
+            verified_test=verified_test,
+            trace_meta=trace_meta,
+            initial_test=initial_test,
         )
+
+        # 5. Clean Daytona Teardown (Ephemeral workspace destroyed, zero host footprint)
+        self.sandbox.destroy_workspace(ws.workspace_id)
+
+        # 6. SurrealDB Intake: Ingest verified postmortem into Agent Memory
         self.memory.save_postmortem(postmortem)
 
-        # 6. Reassuring ElevenLabs voice signoff to Ayush
+        # 7. Reassuring ElevenLabs voice signoff to Ayush
         signoff = SUCCESS_SIGNOFF_TEMPLATE
         voice_event = self.voice.synthesize_speech(signoff)
 
@@ -132,3 +132,29 @@ class AegisOrchestrator:
             "voice_signoff": signoff,
             "voice_event": voice_event,
         }
+
+    def generate_incident_report(
+        self,
+        incident_id: str,
+        service_name: str,
+        root_cause: str,
+        patch_code: str,
+        verified_test: SandboxExecutionResult,
+        trace_meta: Dict[str, str],
+        initial_test: Optional[SandboxExecutionResult] = None,
+    ) -> IncidentPostmortem:
+        """
+        Teardown Deprecation Hook: As Daytona destroys the sandbox, synthesizes a
+        structured Incident Report optimized for SurrealDB Vector & Graph intake.
+        """
+        return IncidentPostmortem(
+            incident_id=incident_id,
+            service_name=service_name,
+            root_cause=root_cause,
+            resolution_diff=patch_code,
+            verified_in_daytona=verified_test.passed,
+            phoenix_trace_id=trace_meta.get("phoenix_trace_id"),
+            phoenix_span_id=trace_meta.get("phoenix_span_id"),
+            phoenix_ui_url=trace_meta.get("phoenix_ui_url"),
+            guardrail_verdict="PASS",
+        )
