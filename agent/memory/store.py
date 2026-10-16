@@ -38,6 +38,16 @@ class SurrealMemoryStore:
             "handover_notes": "Previous shift (Alice Chen): Saw brief 200ms lock latency spikes on auth-gateway around 4:15 AM during marketing email batch. No alerts fired, but keep an eye on Redis client count.",
         }
 
+    def query_open_uncertainties(self, service_name: Optional[str] = None) -> List[Dict[str, Any]]:
+        return [
+            {
+                "service": "auth-gateway",
+                "observation": "Redis client connection pool creep observed during previous shift marketing batch.",
+                "verification_step": "Inspect redis_connected_clients metric in Daytona sandbox before closing incident.",
+                "status": "OPEN",
+            }
+        ]
+
 
 class MockSurrealMemoryStore(SurrealMemoryStore):
     """Deterministic Mock SurrealDB Store loading from mock_data.json."""
@@ -86,3 +96,9 @@ class MockSurrealMemoryStore(SurrealMemoryStore):
                 "handover_notes": s.get("handover_notes_from_previous", "All systems nominal."),
             }
         return super().get_active_on_call_shift()
+
+    def query_open_uncertainties(self, service_name: Optional[str] = None) -> List[Dict[str, Any]]:
+        uncertainties = self._data.get("uncertainties", [])
+        if service_name:
+            return [u for u in uncertainties if u.get("service") == service_name or u.get("status") == "OPEN"]
+        return uncertainties

@@ -1,4 +1,4 @@
-"""agent/memory/seed_data.py - Populates SurrealDB with Microservices, Incidents & Shifts."""
+"""agent/memory/seed_data.py - Populates SurrealDB with Microservices, Graph Edges, Incidents & Shifts."""
 import json
 import os
 import sys
@@ -18,7 +18,7 @@ def load_mock_data():
         return json.load(f)
 
 
-def seed_surrealdb(url="ws://localhost:8000/rpc", user="root", password="root", namespace="aegis", database="sre_memory"):
+def seed_surrealdb(url="ws://localhost:8000/rpc", user="root", password="root", namespace="aegis", database="incidents"):
     data = load_mock_data()
     print(f"[*] Loaded mock data: {len(data['services'])} services, {len(data['shifts'])} shifts, {len(data['postmortems'])} postmortems.")
 
@@ -32,16 +32,31 @@ def seed_surrealdb(url="ws://localhost:8000/rpc", user="root", password="root", 
                 await db.use(namespace, database)
                 
                 print("[*] Connected to SurrealDB. Seeding records...")
+                # 1. Services
                 for s in data["services"]:
-                    await db.create(s["id"], s)
+                    s_clean = {k: v for k, v in s.items() if k != "depends_on"}
+                    await db.create(s["id"], s_clean)
                 
+                # 2. Graph Relations (RELATE service->depends_on->service)
+                for s in data["services"]:
+                    source_id = s["id"]
+                    for target_id in s.get("depends_on", []):
+                        rel_query = f"RELATE {source_id}->depends_on->{target_id} SET critical = true;"
+                        await db.query(rel_query)
+                
+                # 3. Postmortems
                 for p in data["postmortems"]:
                     await db.create(f"postmortem:{p['incident_id']}", p)
                 
+                # 4. Shifts
                 for sh in data["shifts"]:
                     await db.create(sh["shift_id"], sh)
 
-                print("[SUCCESS] All records seeded into SurrealDB successfully!")
+                # 5. Uncertainties
+                for u in data.get("uncertainties", []):
+                    await db.create(u["id"], u)
+
+                print("[SUCCESS] All records and graph edges seeded into SurrealDB successfully!")
 
         asyncio.run(_run_seed())
 
