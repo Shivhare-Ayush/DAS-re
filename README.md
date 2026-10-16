@@ -6,13 +6,13 @@
 ---
 
 ## 🌟 The Problem & Mission
-At 2:15 AM on a Saturday, production microservices collapse. PagerDuty is screaming. The on-call SRE is groggy in bed or driving. Today's triage requires fumbling through 14 open browser tabs, deciphering cryptic stack traces, and manually executing dangerous terminal commands under extreme panic. A single mistyped `rm -rf` or unverified database migration turns a minor cluster hiccup into a multi-million-dollar catastrophe.
+At 2:15 AM on a Saturday, production microservices collapse. PagerDuty is screaming. The on-call SRE is groggy in bed or driving. Today's triage requires fumbling through 14 open browser tabs, deciphe[...]
 
 **Aegis** is an autonomous Voice SRE that bridges conversational voice intelligence with zero-trust cloud orchestration:
 1. **Wakes the SRE over natural conversational voice** using ultra-low-latency bidirectional streaming (**ElevenLabs**).
 2. **Reconnoiters dynamic web consoles & status dashboards** without API limits using stealth headless cloud browsers (**Anchor Browser**).
 3. **Retrieves past incident topologies and postmortem solutions** using multi-model vector embeddings and dependency graphs (**SurrealDB**).
-4. **Intercepts and evaluates every remediation action** through zero-trust security guardrails, **E2E OpenInference traces**, and **continue/terminate feedback gates** that block hallucinated or destructive commands (**Arize AI Phoenix**). Each gate decision is persisted to **SurrealDB** for the next on-call engineer; **Daytona** owns reproduce → patch → verify sandbox phases between gates.
+4. **Intercepts and evaluates every remediation action** through zero-trust security guardrails, **E2E OpenInference traces**, and **continue/terminate feedback gates** that block hallucinated or dest[...]
 5. **Ephemerally reproduces the bug, runs tests, and applies code patches** inside 100% isolated, reproducible cloud developer environments (**Daytona**).
 
 ---
@@ -36,8 +36,8 @@ At 2:15 AM on a Saturday, production microservices collapse. PagerDuty is scream
 
 ### 1. Installation
 ```bash
-git clone https://github.com/Shivhare-Ayush/aegis-sre.git
-cd aegis-sre
+git clone https://github.com/Shivhare-Ayush/DAS-re.git
+cd DAS-re
 
 # Install dependencies with uv (or pip)
 uv venv
@@ -87,3 +87,5 @@ To eliminate git merge conflicts during rapid hackathon sprints:
 
 ## 🎤 3-Minute Live Stage Pitch Script (180 Seconds)
 See [`obsidian-code-agent/tasks/2026-10-16-001/030-plan.md`](../obsidian/obsidian-code-agent/tasks/2026-10-16-001/030-plan.md) for the second-by-second stage presentation walkthrough!
+
+```
