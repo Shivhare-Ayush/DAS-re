@@ -9,7 +9,7 @@ Never ramble. Keep verbal turns under 3 sentences for ultra-low latency voice st
 
 URGENT_ALERT_TEMPLATE = "Ayush, wake up. {service_name} is erroring at {error_rate}% on AWS. Blast radius detected on {blast_radius}."
 
-RECON_SUMMARY_TEMPLATE = "Anchor confirmed CPU at {cpu_percent}%. SurrealDB matches incident {similar_id}: {root_cause}. Spinning up an isolated Daytona sandbox to verify the fix."
+RECON_SUMMARY_TEMPLATE = "CloudWatch telemetry confirms CPU at {cpu_percent}%. SurrealDB matches incident {similar_id}: {root_cause}. Spinning up an isolated Daytona sandbox to verify the fix."
 
 GUARDRAIL_VETO_TEMPLATE = "Safety Warning: Dangerous command vetoed by Arize guardrails: {rule}. Switching to surgical key release."
 

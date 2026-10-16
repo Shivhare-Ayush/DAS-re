@@ -1,7 +1,7 @@
 # 🎤 Pitch Deck Context & Slide-by-Slide Blueprint: DAS-re
 
 > **Event:** Daytona HackSprint #6 w/ Arize AI (Friday, Oct 16, 2026 @ JFK27 Basement, NYC)  
-> **Target Track:** 1st Place Overall ($3,000 Cash + $10k credits) + Best Daytona / SurrealDB / Arize / AWS  
+> **Target Track:** 1st Place Overall ($3,000 Cash + $10k credits) + Best Daytona / SurrealDB / Arize  
 > **Presentation Window:** Strictly **3 Minutes (180 Seconds)** + 2 Minutes Q&A  
 > **Team:** Ayush Shivhare, Jagnoor Singh & Presentation Team  
 > **Live GitHub:** https://github.com/Shivhare-Ayush/aegis-sre  
@@ -11,15 +11,19 @@
 ## 🎯 Project Overview & Rebrand
 * **Project Name:** **DAS-re** (formerly Aegis)
 * **Tagline:** The Autonomous Zero-Trust Cloud Operator & Voice SRE
-* **Core Strategic Pivot:** **Daytona is the primary execution container for the entire incident lifecycle** (reproduction $\to$ surgical patch $\to$ regression test $\to$ teardown deprecation hook). ElevenLabs voice synthesis has been repositioned as a **reach / executive alerting layer** to protect against venue Wi-Fi latency, packet loss, and microphone feedback during the live pitch.
+* **Core Strategic Architecture:**
+  1. **Daytona Cloud Sandbox:** The primary execution container for the entire incident lifecycle (reproduction $\to$ surgical patch $\to$ regression test $\to$ teardown deprecation hook). Code is *never* patched directly on production.
+  2. **SurrealDB Multi-Model Knowledge Graph:** Directional graph traversals (`service->depends_on->service`) computing upstream and downstream blast radius, fused with HNSW vector similarity over historical postmortems and persistent on-call shift memory.
+  3. **Arize AI Phoenix Guardrails:** Real-time OpenInference tracing and AST/policy interceptor that triggers hard vetos on destructive commands (`FLUSHALL`, dropping schemas) before execution.
+  4. **ElevenLabs Voice:** Reach / executive alerting layer delivering hands-free audio briefing to the on-call engineer.
 
 ---
 
 ## 🧭 Executive Narrative Arc (The Emotional Hook)
 * **The Villain:** **"A Wrong Answer Returns 200" & Institutional Amnesia.**  
-  Traditional software throws HTTP 500 or exit code 1. Autonomous AI agents hallucinate destructive commands (`redis-cli FLUSHALL`, dropping schemas, silencing PagerDuty alerts) that execute with **HTTP 200 / exit code 0**, silently wiping production data while reporting "success." Uncontained agents on production hosts have an unlimited blast radius.
+  Traditional software throws HTTP 500 or exit code 1. Autonomous AI agents hallucinate destructive commands (`redis-cli FLUSHALL`, dropping schemas, clearing session locks) that execute with **HTTP 200 / exit code 0**, silently wiping production data while reporting "success." Uncontained agents on live production hosts have an unlimited blast radius.
 * **The Hero:** **DAS-re — Autonomous Zero-Trust Incident Operator with Photographic Memory.**  
-  Fuses SurrealDB multi-model memory (vector postmortems + graph blast radius), Arize Phoenix zero-trust guardrails, and Daytona ephemeral cloud containers to safely isolate, reproduce, patch, and verify outages before touching live production.
+  Fuses SurrealDB multi-model knowledge graph (vector postmortems + graph blast radius), Arize Phoenix zero-trust guardrails, and Daytona ephemeral cloud containers to safely isolate, reproduce, patch, and verify outages before touching live production.
 * **The Punchline:** *"You don't fight cloud fires at 2:00 AM anymore. With DAS-re, you sleep through the outage."*
 
 ---
@@ -30,8 +34,8 @@
 [Slide 1: Problem (0:00 - 0:35)] ──> "A Wrong Answer Returns 200" & Blast Radius
 [Slide 2: Solution (0:35 - 1:10)] ──> DAS-re Zero-Trust Architecture
 [Slide 3: Deep Dive (1:10 - 1:45)] ──> Daytona as Primary Incident Container & Teardown Hook
-[Slide 4: Deep Dive (1:45 - 2:20)] ──> SurrealDB Multi-Model & Shift Handover
-[Slide 5: Live Demo (2:20 - 3:00)] ──> 180s Deterministic Walkthrough & Impact
+[Slide 4: Deep Dive (1:45 - 2:20)] ──> SurrealDB Multi-Model Knowledge Graph & Blast Radius
+[Slide 5: Live Demo (2:20 - 3:00)] ──> 180s Deterministic Walkthrough & Enterprise Triad
 ```
 
 ---
@@ -50,13 +54,12 @@
 
 ### Slide 2: The Solution — DAS-re Architecture (0:35 – 1:10)
 * **Header:** DAS-re: Autonomous Zero-Trust Cloud Operator
-* **Visual:** Clean modular system diagram showing the 4-layer containment loop:
-  1. **Anchor Headless Browser:** Stealth telemetry recon inspecting live AWS console & Grafana dashboards without manual API tokens.
-  2. **SurrealDB Multi-Model Memory:** Instant photographic recall combining **HNSW Vector Search** (matching past postmortems) with **Directional Graph Traversals** (`service->depends_on->service` for blast radius).
-  3. **Arize AI Phoenix Guardrails:** Real-time semantic AST/policy supervisor intercepting destructive commands before execution (*Red Violation Span*).
-  4. **Daytona Ephemeral Cloud Container:** The secure execution sandbox where failures are reproduced, surgically patched, and regression-tested.
+* **Visual:** Clean modular system diagram showing the 3-layer containment loop:
+  1. **SurrealDB Multi-Model Knowledge Graph:** Directional graph traversal calculating blast radius (`payment-vault` $\to$ `auth-gateway` $\to$ `redis-cluster`) combined with HNSW vector search over past postmortems.
+  2. **Arize AI Phoenix Guardrails:** Real-time semantic AST/policy supervisor intercepting destructive commands before execution (*Red Violation Span*).
+  3. **Daytona Ephemeral Cloud Container:** The secure execution boundary where failures are reproduced, surgically patched, and regression-tested before any code touches production.
 * **Speaker Script:**
-  > *"DAS-re enforces zero-trust containment at every layer: Anchor pulls live Grafana telemetry; SurrealDB recalls past incident postmortems using HNSW vector search and maps the dependency blast radius; Arize Phoenix evaluates every proposed command against zero-trust policies and triggers instant hard vetos on destructive actions; and Daytona provisions an ephemeral cloud container to safely reproduce and verify the fix."*
+  > *"DAS-re enforces zero-trust containment at every layer: When an alert hits, SurrealDB traverses our live service dependency graph to calculate blast radius and matches historical postmortems using vector search; Arize Phoenix evaluates every proposed command against zero-trust policies and triggers instant hard vetos on destructive actions; and Daytona provisions an ephemeral cloud container to safely reproduce, patch, and verify the fix."*
 
 ---
 
@@ -75,38 +78,50 @@
 
 ---
 
-### Slide 4: Deep Dive — SurrealDB Multi-Model & Shift Memory (1:45 – 2:20)
-* **Header:** SurrealDB: Photographic Memory & Blast Radius
-* **Visual:** Split graphic showing Vector HNSW matching on the left, and an active directional dependency graph on the right (`payment-vault` $\rightarrow$ `auth-gateway` $\rightarrow$ `redis-cluster` / `user-db`).
+### Slide 4: Deep Dive — SurrealDB Knowledge Graph & Shift Memory (1:45 – 2:20)
+* **Header:** SurrealDB: Knowledge Graph & Photographic Memory
+* **Visual:** Interactive Knowledge Graph topology diagram:
+  ```
+        [payment-vault] (tier: backend)
+               │
+               ▼  <-depends_on<- (Upstream Impacted)
+        [auth-gateway] (tier: gateway)  ◄── [TARGET OUTAGE: SEV-1]
+         ├──► ->depends_on-> [redis-cluster] (tier: cache)
+         └──► ->depends_on-> [user-db] (tier: database)
+  ```
+  Side-by-side with Surrealist Graph Explorer view showing active nodes, vector similarity scores, and SRE shift handover cards.
 * **Key Bullet Points for Slide:**
-  - **Vector + Graph Fusion in One Query:**
-    - HNSW Cosine Distance matches historical outages in sub-10ms (INC-892 Redis lock starvation).
-    - Directional graph traversal tracks downstream dependencies (`->depends_on->` to `redis-cluster`, `user-db`) and upstream impacted business services (`<-depends_on<-` to `payment-vault`).
-    - Computes real-time blast radius score (0.85 CRITICAL).
+  - **Directional Graph Traversals & Blast Radius:**
+    - Downstream query (`->depends_on->`): maps affected databases (`redis-cluster`, `user-db`).
+    - Upstream query (`<-depends_on<-`): alerts upstream revenue-critical services (`payment-vault`).
+    - Computes real-time blast radius score: **CRITICAL (0.85)**.
+  - **HNSW Vector Cosine Matching:**
+    - Matches identical past outages in sub-10ms (INC-892 Redis lock starvation).
   - **Rotating On-Call Shift Memory & Uncertainties:**
     - SRE shift handover notes (Alice Chen $\to$ Ayush Shivhare) and open operational hypotheses (`uncertainty:001`) persist seamlessly across rotations without memory drift.
 * **Speaker Script:**
-  > *"When an incident hits, SurrealDB acts as the brain. In a single multi-model query, it fuses HNSW vector search over past postmortems with directional graph traversals. It doesn't just find the fix for `auth-gateway`—it calculates that `payment-vault` is in the immediate blast radius. Furthermore, SurrealDB preserves rotating shift memory and open uncertainties, so an engineer woken up at 2:00 AM inherits the exact context of the previous shift."*
+  > *"When an incident hits, SurrealDB acts as our institutional brain. In a single multi-model engine, it traverses our service knowledge graph. It doesn't just isolate `auth-gateway`—it walks upstream edges to identify that `payment-vault` is in the immediate blast radius, scoring it as CRITICAL. Simultaneously, it performs HNSW vector matching over past postmortems to locate the exact lock starvation patch from last month. And with shift memory, newly paged engineers inherit the previous shift's notes and open uncertainties without losing a beat."*
 
 ---
 
 ### Slide 5: Live Demo & Impact (2:20 – 3:00) — [THE CLIMAX]
 * **Header:** Live Incident Triage: From Alert to Verified PR in 60s
-* **Visual:** Split screen / Live Terminal + Arize Phoenix Trace UI:
-  - **Left:** Deterministic CLI runner (`python main.py --demo`).
-  - **Right:** Phoenix UI showing green Root Agent span, Red Veto Span on `FLUSHALL`, and Daytona execution span.
+* **Visual:** Enterprise Observability Triad split-screen setup:
+  - **Left Screen:** Deterministic CLI runner (`python main.py --demo`) rendering the live SurrealDB Knowledge Graph, telemetry ingestion, and ElevenLabs voice alert.
+  - **Right Screen (Tab 1):** Arize Phoenix UI (`localhost:6006`) highlighting the **Red Veto Span** blocking `FLUSHALL`.
+  - **Right Screen (Tab 2):** Surrealist Graph Explorer (`localhost:8000`) displaying the live node-link service topology.
 * **Demo Sequence (180s Pitch Walkthrough):**
-  1. **[0:00] PagerDuty Alert Inbound:** `auth-gateway` 504 spike.
-  2. **[0:15] Recon & Memory:** Anchor scrapes Grafana; SurrealDB matches INC-892.
+  1. **[0:00] PagerDuty Alert Inbound:** `auth-gateway` 504 timeout spike.
+  2. **[0:15] Telemetry & SurrealDB Graph:** Ingests metrics; SurrealDB traverses dependency graph, alerts `payment-vault`, and matches past fix INC-892 via vector cosine similarity.
   3. **[0:30] Arize Phoenix Intercept:** Agent attempts uncontained `FLUSHALL`. Arize triggers hard veto (*Red Span*).
-  4. **[0:45] Daytona Sandbox:** Spins up container, reproduces defect, applies patch, passes 14 tests, harvests postmortem, destroys container.
+  4. **[0:45] Daytona Sandbox:** Spins up container in 4s, reproduces defect, applies patch, passes 14 tests, harvests postmortem, destroys container.
   5. **[1:00] Resolution:** ElevenLabs audio signoff + SurrealDB postmortem saved.
 * **Key Metrics & ROI:**
   - **MTTR reduced from 45 minutes to < 60 seconds.**
   - **100% automated reproduction & verification in an isolated sandbox.**
   - **0 manual toil, 0 residual host footprint, 0 risk of production data loss.**
 * **Speaker Script (Ayush):**
-  > *"In 60 seconds, DAS-re triaged the alert, blocked a catastrophic production flush with Arize guardrails, verified a surgical fix in an isolated Daytona container, and updated institutional memory in SurrealDB. You don't fight cloud fires at 2:00 AM anymore. With DAS-re, you sleep through the outage. Thank you."*
+  > *"In 60 seconds, DAS-re triaged the alert, navigated our SurrealDB knowledge graph to calculate blast radius, blocked a catastrophic production flush with Arize guardrails, verified a surgical fix in an isolated Daytona container, and updated institutional memory in SurrealDB. You don't fight cloud fires at 2:00 AM anymore. With DAS-re, you sleep through the outage. Thank you."*
 
 ---
 
@@ -115,8 +130,8 @@
    - Background: Dark Charcoal / Deep Matte Black (`#0a0b0e` / `#121316`)
    - Daytona Emerald Green: `#10b981` (Container badges & pass states)
    - Arize Alert Red: `#ef4444` (Veto & threat highlights)
-   - SurrealDB Purple: `#8b5cf6` (Memory & graph nodes)
+   - SurrealDB Purple: `#8b5cf6` (Knowledge graph nodes & vector matches)
    - Text: Pure White (`#ffffff`) for titles, Muted Slate (`#94a3b8`) for descriptions.
 2. **Typography:** Clean monospace (JetBrains Mono) for code/logs, modern sans-serif (Inter, SF Pro) for headers.
 3. **Slide Rule:** High visual density, minimal text. Keep bullets under 10 words. Let screenshots, terminal outputs, and flame graphs tell the story!
-4. **Sponsor Logos on Slide 2/3:** Daytona, Arize AI, SurrealDB, ElevenLabs, Anchor Browser, AWS Bedrock.
+4. **Sponsor Logos on Slide 2/3:** Daytona, Arize AI, SurrealDB, ElevenLabs.

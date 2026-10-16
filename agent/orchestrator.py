@@ -47,9 +47,12 @@ class AegisOrchestrator:
         dashboard_url = alert.telemetry.dashboard_url if alert.telemetry else "https://grafana.internal/d/auth"
         telemetry = self.browser.scrape_dashboard(dashboard_url)
 
-        # 2. SurrealDB finds similar past incidents via vector search
+        # 2. SurrealDB finds similar past incidents via vector search & graph traversal
         similar_incidents = self.memory.query_similar_incidents(service_name=alert.service_name)
         past_fix = similar_incidents[0] if similar_incidents else None
+        blast_radius = self.memory.calculate_blast_radius(alert.service_name)
+        shift = self.memory.get_active_on_call_shift()
+        uncertainties = self.memory.query_open_uncertainties(alert.service_name)
 
         # 3. ElevenLabs speaks urgent alert & recon summary to SRE
         recon_text = RECON_SUMMARY_TEMPLATE.format(
@@ -62,6 +65,9 @@ class AegisOrchestrator:
         return {
             "telemetry": telemetry,
             "similar_incidents": similar_incidents,
+            "blast_radius": blast_radius,
+            "shift": shift,
+            "uncertainties": uncertainties,
             "voice_alert": recon_text,
             "voice_event": voice_event,
         }

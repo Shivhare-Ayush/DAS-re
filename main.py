@@ -33,11 +33,36 @@ def run_demo():
     )
     time.sleep(0.3)
 
-    # Step 2: Recon & Memory Lookup
-    print("[RECON] Connecting Anchor Browser to AWS Grafana Dashboard...")
-    print("[MEMORY] Querying SurrealDB Vector Memory for past incident postmortems...")
+    # Step 2: Telemetry Ingestion & SurrealDB Memory Lookup
+    print("[TELEMETRY] Ingesting CloudWatch & Prometheus Metrics via Incident Webhook...")
+    print("[MEMORY] Querying SurrealDB Multi-Model Engine (HNSW Vector + Dependency Graph)...")
     recon_res = orchestrator.handle_incident_alert(alert)
     print(f"[VOICE] ElevenLabs Audio Stream: \"{recon_res['voice_alert']}\"")
+    print()
+
+    # Step 2b: SurrealDB Knowledge Graph & Blast Radius
+    blast = recon_res.get("blast_radius", {})
+    shift = recon_res.get("shift", {})
+    upstream_list = ", ".join(blast.get("upstream_impacted_services", []))
+    downstream_list = ", ".join(blast.get("downstream_dependencies", []))
+
+    print("[SURREALDB KNOWLEDGE GRAPH] Multi-Model Graph Traversal & Blast Radius:")
+    print("  +--------------------------------------------------------------------+")
+    print("  | [Graph Traversal] Directional Service Dependency Mapping           |")
+    print("  |                                                                    |")
+    print("  |   payment-vault (tier: backend)                                    |")
+    print("  |         |                                                          |")
+    print("  |         v  <-depends_on<-                                          |")
+    print(f"  |   {alert.service_name} (tier: gateway)  <-- [TARGET OUTAGE: {alert.severity:<8}]     |")
+    print("  |         +--> ->depends_on-> redis-cluster (tier: cache)            |")
+    print("  |         +--> ->depends_on-> user-db (tier: database)               |")
+    print("  |                                                                    |")
+    print(f"  | Upstream Impacted: [{upstream_list}]                              |")
+    print(f"  | Downstream Deps  : [{downstream_list}]                      |")
+    print(f"  | Criticality      : {blast.get('criticality', 'N/A'):<8} (Blast Radius Score: {blast.get('blast_radius_score', 0.0)})          |")
+    print("  +--------------------------------------------------------------------+")
+    print(f"[SURREALDB SHIFT MEMORY] Active On-Call: {shift.get('engineer_name')} ({shift.get('role')})")
+    print(f"                         Handover Notes : \"{shift.get('handover_notes')}\"")
     print()
 
     # Step 3: Zero-Trust Guardrail Veto
