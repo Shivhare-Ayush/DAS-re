@@ -1,0 +1,13 @@
+--- a/src/locks.py
++++ b/src/locks.py
+@@ -14,6 +14,9 @@
+     def process_critical_section(self, key: str, should_fail: bool = False):
+         self.acquire(key)
+-        if should_fail:
+-            raise ValueError("Unexpected database network blip during processing")
+-        self.release(key)
++        try:
++            if should_fail:
++                raise ValueError("Unexpected database network blip during processing")
++        finally:
++            self.release(key)

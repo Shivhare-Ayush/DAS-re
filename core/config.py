@@ -1,0 +1,45 @@
+"""core/config.py - Centralized Pydantic Settings for Aegis."""
+from functools import lru_cache
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
+
+
+class Settings(BaseSettings):
+    # Daytona
+    DAYTONA_API_KEY: str = Field(default="mock_daytona_key")
+    DAYTONA_SERVER_URL: str = Field(default="https://app.daytona.io/api")
+    DAYTONA_TARGET: str = Field(default="us")
+
+    # ElevenLabs
+    ELEVENLABS_API_KEY: str = Field(default="mock_elevenlabs_key")
+    ELEVENLABS_VOICE_ID: str = Field(default="21m00Tcm4TlvDq8ikWAM")
+    ELEVENLABS_MODEL_ID: str = Field(default="eleven_turbo_v2_5")
+
+    # Arize AI Phoenix
+    PHOENIX_COLLECTOR_ENDPOINT: str = Field(default="http://localhost:6006")
+    PHOENIX_PROJECT_NAME: str = Field(default="aegis-voice-sre")
+
+    # Anchor Browser
+    ANCHOR_API_KEY: str = Field(default="mock_anchor_key")
+    ANCHOR_CDP_URL: str = Field(default="wss://connect.anchorbrowser.io")
+
+    # SurrealDB
+    SURREALDB_URL: str = Field(default="ws://localhost:8000/rpc")
+    SURREALDB_USER: str = Field(default="root")
+    SURREALDB_PASS: str = Field(default="root")
+    SURREALDB_NS: str = Field(default="aegis")
+    SURREALDB_DB: str = Field(default="incidents")
+
+    # Fallback / Mock Mode for Stage Demo
+    IS_MOCK_MODE: bool = Field(default=False)
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
+@lru_cache()
+def get_settings() -> Settings:
+    return Settings()
