@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AWS Grafana - auth-gateway Production Dashboard</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #111217; color: #d8d9da; margin: 0; padding: 20px; }
+        .header { display: flex; justify-content: space-between; border-bottom: 1px solid #22252b; padding-bottom: 15px; }
+        .alert-badge { background: #e02f44; color: #fff; padding: 6px 12px; border-radius: 4px; font-weight: bold; font-size: 14px; }
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 25px; }
+        .card { background: #181b1f; border: 1px solid #22252b; border-radius: 6px; padding: 20px; }
+        .metric-title { font-size: 13px; color: #8e8e8e; text-transform: uppercase; letter-spacing: 0.5px; }
+        .metric-value { font-size: 38px; font-weight: bold; margin: 10px 0; }
+        .critical { color: #f2495c; }
+        .warning { color: #ff9830; }
+        .ok { color: #73bf69; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h2>auth-gateway / Production Health Dashboard</h2>
+            <p style="color: #8e8e8e; margin: 0;">Cluster: prod-us-east-1a | Host: ip-10-0-4-91</p>
+        </div>
+        <div>
+            <span class="alert-badge" id="status-badge">CRITICAL ALERT: 504 TIMEOUT SPIKE</span>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <div class="metric-title">CPU Utilization</div>
+            <div class="metric-value critical" id="cpu-metric">98.5%</div>
+            <p style="color: #8e8e8e; margin: 0;">Normal baseline: &lt;35%</p>
+        </div>
+        <div class="card">
+            <div class="metric-title">HTTP 504 Error Rate</div>
+            <div class="metric-value critical" id="error-rate-metric">94.2%</div>
+            <p style="color: #8e8e8e; margin: 0;">SLA Threshold: &lt;0.05%</p>
+        </div>
+        <div class="card">
+            <div class="metric-title">Redis Blocked Clients</div>
+            <div class="metric-value critical" id="blocked-clients-metric">4,200</div>
+            <p style="color: #8e8e8e; margin: 0;">Pool limit: 4,096 clients (EXHAUSTED)</p>
+        </div>
+    </div>
+</body>
+</html>

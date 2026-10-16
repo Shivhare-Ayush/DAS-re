@@ -1,0 +1,82 @@
+{
+  "services": [
+    {
+      "id": "service:auth-gateway",
+      "name": "auth-gateway",
+      "tier": "gateway",
+      "repo_url": "https://github.com/Shivhare-Ayush/auth-gateway-demo.git",
+      "depends_on": ["service:redis-cluster", "service:user-db"]
+    },
+    {
+      "id": "service:redis-cluster",
+      "name": "redis-cluster",
+      "tier": "cache",
+      "repo_url": "https://github.com/aegis-sre/redis-infra.git",
+      "depends_on": []
+    },
+    {
+      "id": "service:user-db",
+      "name": "user-db",
+      "tier": "database",
+      "repo_url": "https://github.com/aegis-sre/user-db-cluster.git",
+      "depends_on": []
+    },
+    {
+      "id": "service:payment-vault",
+      "name": "payment-vault",
+      "tier": "backend",
+      "repo_url": "https://github.com/aegis-sre/payment-vault.git",
+      "depends_on": ["service:auth-gateway"]
+    }
+  ],
+  "shifts": [
+    {
+      "shift_id": "shift:2026-w42-primary",
+      "engineer_name": "Ayush Shivhare",
+      "role": "Primary On-Call SRE",
+      "shift_start": "2026-10-16T08:00:00Z",
+      "shift_end": "2026-10-23T08:00:00Z",
+      "iam_role": "sre-elevated-triage",
+      "handover_notes_from_previous": "Previous shift (Alice Chen): Saw brief 200ms lock latency spikes on auth-gateway around 4:15 AM during marketing email batch. No alerts fired, but keep an eye on Redis client count."
+    },
+    {
+      "shift_id": "shift:2026-w41-previous",
+      "engineer_name": "Alice Chen",
+      "role": "Previous On-Call SRE",
+      "shift_start": "2026-10-09T08:00:00Z",
+      "shift_end": "2026-10-16T08:00:00Z",
+      "iam_role": "sre-read-only"
+    }
+  ],
+  "postmortems": [
+    {
+      "incident_id": "INC-892",
+      "service_name": "auth-gateway",
+      "severity": "SEV-1",
+      "title": "Redis lock starvation under peak traffic spike",
+      "root_cause": "Redis lock starvation: Critical section in locks.py threw unhandled database blip exception before reaching release() handle, causing locks to remain allocated indefinitely until Redis TTL expired.",
+      "resolution_diff": "--- a/src/locks.py\n+++ b/src/locks.py\n@@ -14,5 +14,8 @@\n     def process_critical_section(self, key: str, should_fail: bool = False):\n         self.acquire(key)\n+        try:\n             if should_fail:\n                 raise ValueError(\"Unexpected database network blip during processing\")\n+        finally:\n+            self.release(key)\n",
+      "verified_in_daytona": true,
+      "date": "2026-09-21T03:14:00Z"
+    },
+    {
+      "incident_id": "INC-741",
+      "service_name": "user-db",
+      "severity": "SEV-2",
+      "title": "Migration lock timeout on accounts table",
+      "root_cause": "DDL query without lock_timeout caused connection starvation.",
+      "resolution_diff": "SET LOCAL lock_timeout = '2s';",
+      "verified_in_daytona": true,
+      "date": "2026-08-14T11:22:00Z"
+    }
+  ],
+  "uncertainties": [
+    {
+      "id": "uncertainty:001",
+      "service": "auth-gateway",
+      "observation": "Spike in HTTP 504s could be caused by either Redis maxclients saturation (4096) or application-level deadlock in locks.py.",
+      "verification_step": "Run 'pytest tests/test_locks.py' inside Daytona isolated sandbox to verify if locks leak locally without touching live Redis cluster.",
+      "status": "OPEN"
+    }
+  ]
+}
