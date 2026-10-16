@@ -1,7 +1,14 @@
 """tests/test_surreal_memory.py - Tests for SurrealDB Multi-Model Incident Memory."""
 from unittest.mock import MagicMock, patch
+from agent.memory.decisions import agent_decision_id, agent_run_id, decision_document, run_document
 from agent.memory.store import SurrealMemoryStore, MockSurrealMemoryStore
-from core.schemas import IncidentPostmortem
+from core.schemas import (
+    AgentDecisionRecord,
+    AgentRunSummary,
+    AgentStepKind,
+    IncidentPostmortem,
+    ProcessControlAction,
+)
 
 
 def test_surreal_memory_matching():
@@ -179,3 +186,69 @@ def test_surreal_uncertainty_filtering_exact_service():
     assert not any(u["service"] == "user-db" for u in auth_uncertainties)
 
 
+def test_surreal_agent_decision_handover():
+    store = MockSurrealMemoryStore()
+    store.save_agent_decision(
+        AgentDecisionRecord(
+            decision_id="decision:test001",
+            trace_id="trace-abc",
+            incident_id="INC-901",
+            engineer_name="Ayush Shivhare",
+            shift_id="shift:2026-w42-primary",
+            step=AgentStepKind.GUARDRAIL,
+            gate="POST_GUARDRAIL",
+            control_action=ProcessControlAction.CONTINUE,
+            continue_pipeline=True,
+            reason="Vetoed prod command; Daytona path only.",
+            phoenix_span_id="span-1",
+            daytona_workspace_id="ws-daytona-mock-42",
+        )
+    )
+    store.save_agent_run_summary(
+        AgentRunSummary(
+            trace_id="trace-abc",
+            incident_id="INC-901",
+            engineer_name="Ayush Shivhare",
+            shift_id="shift:2026-w42-primary",
+            pipeline_completed=True,
+            final_action=ProcessControlAction.CONTINUE,
+        )
+    )
+    runs = store.get_agent_runs_for_handover(limit=1)
+    assert runs[0].trace_id == "trace-abc"
+
+
+def test_agent_trail_documents_match_partner_schema():
+    decision = AgentDecisionRecord(
+        decision_id="decision:test001",
+        trace_id="abc123",
+        incident_id="INC-901",
+        engineer_name="Ayush Shivhare",
+        shift_id="shift:2026-w42-primary",
+        step=AgentStepKind.GUARDRAIL,
+        gate="POST_GUARDRAIL",
+        control_action=ProcessControlAction.CONTINUE,
+        continue_pipeline=True,
+        reason="Daytona path only.",
+        phoenix_span_id="span-1",
+    )
+    doc = decision_document(decision)
+    assert agent_decision_id(decision.decision_id) == "agent_decision:test001"
+    assert agent_run_id(decision.trace_id) == "agent_run:abc123"
+    assert doc["control_action"] == "CONTINUE"
+    assert "timestamp" not in doc
+    assert "recorded_at" in doc
+
+    summary = AgentRunSummary(
+        trace_id="abc123",
+        incident_id="INC-901",
+        engineer_name="Ayush Shivhare",
+        shift_id="shift:2026-w42-primary",
+        pipeline_completed=True,
+        final_action=ProcessControlAction.CONTINUE,
+        decisions=[decision],
+    )
+    run = run_document(summary)
+    assert "decisions" not in run
+    assert run["shift_id"] == "shift:2026-w42-primary"
+    assert run["phoenix_project"] == "aegis-voice-sre"

@@ -65,6 +65,20 @@ def run_demo():
     print(f"                         Handover Notes : \"{shift.get('handover_notes')}\"")
     print()
 
+    from agent.memory.arize_csv import graph_edges_from_spans, load_arize_spans
+
+    print("[ARIZE -> SURREAL GRAPH] Phoenix span CSV linked onto the service graph:")
+    for edge in graph_edges_from_spans(load_arize_spans()):
+        if edge["span_kind"] not in ("AGENT", "CHAIN"):
+            continue
+        print(
+            f"  {edge['engineer']} ({edge['timezone']}) -[{edge['control_action']}]-> "
+            f"{edge['service']}  trace={edge['trace_id']}  "
+            f"latency={edge['latency_ms']}ms  error_rate={edge['error_rate']}%"
+        )
+        print(f"    phoenix:{edge['span_name']} status={edge['status_code']} | {edge['output']}")
+    print()
+
     # Step 3: Zero-Trust Guardrail Veto
     time.sleep(0.3)
     dangerous_cmd = "redis-cli -h prod-redis FLUSHALL && chmod 777 /etc/auth"

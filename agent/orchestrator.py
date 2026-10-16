@@ -1,13 +1,17 @@
 """agent/orchestrator.py - Core Aegis Decision & Event Orchestrator."""
-from typing import Dict, Any, Optional
+import uuid
+from typing import Dict, Any, List, Optional
 from core.schemas import (
+    AgentDecisionRecord,
+    AgentRunSummary,
+    AgentStepKind,
     IncidentAlert,
-    TelemetrySnapshot,
     GuardrailEvaluation,
     SandboxExecutionResult,
     IncidentPostmortem,
-    VoiceTurnEvent,
+    ProcessControlAction,
 )
+from agent.evals.feedback import FeedbackGate, evaluate_gate
 from agent.voice.client import ElevenLabsVoiceClient, MockElevenLabsVoiceClient
 from agent.evals.guardrail import ArizeGuardrail, MockArizeGuardrail
 from agent.evals.tracer import ArizePhoenixTracer
@@ -135,6 +139,151 @@ class AegisOrchestrator:
             "tests_passed": verified_test.passed,
             "postmortem_saved": True,
             "phoenix_trace": trace_meta,
+            "voice_signoff": signoff,
+            "voice_event": voice_event,
+        }
+
+    def run_incident_pipeline(
+        self,
+        alert: IncidentAlert,
+        proposed_command: str,
+        repo_url: str,
+        file_to_patch: str,
+        patch_code: str,
+    ) -> Dict[str, Any]:
+        """Arize continue/terminate gates, persisted onto the partner Surreal handover log."""
+        recon = self.handle_incident_alert(alert)
+        shift = recon.get("shift") or {}
+        engineer_name = shift.get("engineer_name", "unknown")
+        shift_id = shift.get("shift_id", "shift:unknown")
+        trace_meta = self.tracer.get_active_trace_context()
+        trace_id = trace_meta.get("phoenix_trace_id") or uuid.uuid4().hex
+        decisions: List[AgentDecisionRecord] = []
+
+        recon_verdict = evaluate_gate(
+            FeedbackGate.POST_RECON,
+            {
+                "error_rate_percent": recon["telemetry"].error_rate_percent,
+                "force_triage": alert.severity == "CRITICAL",
+            },
+        )
+        decisions.append(self._record_gate(trace_id, alert, engineer_name, shift_id, AgentStepKind.RECON, recon_verdict, trace_meta))
+        if not recon_verdict.continue_pipeline:
+            self._save_run(trace_id, alert, engineer_name, shift_id, False, recon_verdict.action, decisions)
+            return self._pipeline_payload(trace_id, decisions, False, recon_verdict.action, recon, {})
+
+        guard = self.evaluate_remediation(proposed_command, alert.incident_id)
+        guard_verdict = evaluate_gate(
+            FeedbackGate.POST_GUARDRAIL,
+            {
+                "veto_triggered": guard.veto_triggered,
+                "requires_voice_confirmation": guard.requires_voice_confirmation,
+                "risk_score": guard.risk_score,
+                "sandbox_only_remediation_available": True,
+            },
+        )
+        decisions.append(
+            self._record_gate(
+                trace_id,
+                alert,
+                engineer_name,
+                shift_id,
+                AgentStepKind.GUARDRAIL,
+                guard_verdict,
+                trace_meta,
+                metrics={"veto_triggered": guard.veto_triggered, "risk_score": guard.risk_score},
+            )
+        )
+        if not guard_verdict.continue_pipeline:
+            self._save_run(trace_id, alert, engineer_name, shift_id, False, guard_verdict.action, decisions)
+            return self._pipeline_payload(trace_id, decisions, False, guard_verdict.action, recon, {})
+
+        remed = self.execute_safe_remediation(repo_url, file_to_patch, patch_code, alert.incident_id)
+        verify_verdict = evaluate_gate(
+            FeedbackGate.POST_DAYTONA_VERIFY,
+            {"fix_verified": remed.get("tests_passed", False)},
+        )
+        decisions.append(
+            self._record_gate(
+                trace_id, alert, engineer_name, shift_id, AgentStepKind.DAYTONA_SANDBOX, verify_verdict, trace_meta,
+                daytona_workspace_id=remed.get("workspace_id"),
+            )
+        )
+        memory_verdict = evaluate_gate(
+            FeedbackGate.POST_MEMORY_WRITE,
+            {"postmortem_saved": remed.get("postmortem_saved", False)},
+        )
+        decisions.append(
+            self._record_gate(
+                trace_id, alert, engineer_name, shift_id, AgentStepKind.MEMORY_WRITE, memory_verdict, trace_meta
+            )
+        )
+        completed = verify_verdict.continue_pipeline and memory_verdict.continue_pipeline
+        final_action = ProcessControlAction.CONTINUE if completed else ProcessControlAction.TERMINATE
+        self._save_run(trace_id, alert, engineer_name, shift_id, completed, final_action, decisions)
+        return self._pipeline_payload(
+            trace_id,
+            decisions,
+            completed,
+            final_action,
+            recon,
+            remed,
+            remed.get("voice_signoff"),
+            remed.get("voice_event"),
+        )
+
+    def _record_gate(
+        self,
+        trace_id,
+        alert,
+        engineer_name,
+        shift_id,
+        step,
+        verdict,
+        trace_meta,
+        metrics=None,
+        daytona_workspace_id=None,
+    ) -> AgentDecisionRecord:
+        record = AgentDecisionRecord(
+            decision_id=f"decision:{uuid.uuid4().hex[:12]}",
+            trace_id=trace_id,
+            incident_id=alert.incident_id,
+            engineer_name=engineer_name,
+            shift_id=shift_id,
+            step=step,
+            gate=verdict.gate,
+            control_action=verdict.action,
+            continue_pipeline=verdict.continue_pipeline,
+            reason=verdict.reason,
+            phoenix_span_id=trace_meta.get("phoenix_span_id", "span-mock"),
+            daytona_workspace_id=daytona_workspace_id,
+            metrics=metrics or verdict.metrics_snapshot,
+        )
+        self.memory.save_agent_decision(record)
+        return record
+
+    def _save_run(self, trace_id, alert, engineer_name, shift_id, completed, final_action, decisions):
+        self.memory.save_agent_run_summary(
+            AgentRunSummary(
+                trace_id=trace_id,
+                incident_id=alert.incident_id,
+                engineer_name=engineer_name,
+                shift_id=shift_id,
+                pipeline_completed=completed,
+                final_action=final_action,
+                decisions=decisions,
+            )
+        )
+
+    def _pipeline_payload(self, trace_id, decisions, completed, final_action, recon, remed, signoff=None, voice_event=None):
+        return {
+            "trace_id": trace_id,
+            "decisions": decisions,
+            "pipeline_completed": completed,
+            "final_action": final_action,
+            "phoenix_trace": {"trace_id": trace_id, "span_count": max(len(decisions), 1), "spans": []},
+            "recon": recon,
+            "remediation": remed,
             "voice_signoff": signoff,
             "voice_event": voice_event,
         }

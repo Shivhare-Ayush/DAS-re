@@ -1,5 +1,6 @@
 """core/schemas.py - Canonical Typed Models for Aegis Voice SRE."""
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
@@ -46,6 +47,70 @@ class GuardrailEvaluation(BaseModel):
     veto_triggered: bool = False
     requires_voice_confirmation: bool = False
     authorization_code: Optional[str] = None
+
+
+class ProcessControlAction(str, Enum):
+    CONTINUE = "CONTINUE"
+    TERMINATE = "TERMINATE"
+    STEP_UP_HUMAN = "STEP_UP_HUMAN"
+
+
+class AgentStepKind(str, Enum):
+    RECON = "RECON"
+    MEMORY_LOOKUP = "MEMORY_LOOKUP"
+    GUARDRAIL = "GUARDRAIL"
+    FEEDBACK_GATE = "FEEDBACK_GATE"
+    DAYTONA_SANDBOX = "DAYTONA_SANDBOX"
+    MEMORY_WRITE = "MEMORY_WRITE"
+
+
+class AgentFeedbackVerdict(BaseModel):
+    gate: str
+    action: ProcessControlAction
+    continue_pipeline: bool
+    reason: str
+    metrics_snapshot: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentStepMetric(BaseModel):
+    step: AgentStepKind
+    trace_id: str
+    span_id: str
+    duration_ms: float
+    continue_pipeline: bool
+    control_action: ProcessControlAction
+    attributes: Dict[str, Any] = Field(default_factory=dict)
+    timestamp: datetime = Field(default_factory=utc_now)
+
+
+class AgentDecisionRecord(BaseModel):
+    """Per-step decision trail persisted for the next on-call engineer."""
+
+    decision_id: str
+    trace_id: str
+    incident_id: str
+    engineer_name: str
+    shift_id: str
+    step: AgentStepKind
+    gate: str
+    control_action: ProcessControlAction
+    continue_pipeline: bool
+    reason: str
+    phoenix_span_id: str
+    daytona_workspace_id: Optional[str] = None
+    metrics: Dict[str, Any] = Field(default_factory=dict)
+    timestamp: datetime = Field(default_factory=utc_now)
+
+
+class AgentRunSummary(BaseModel):
+    trace_id: str
+    incident_id: str
+    engineer_name: str
+    shift_id: str
+    pipeline_completed: bool
+    final_action: ProcessControlAction
+    decisions: List[AgentDecisionRecord] = Field(default_factory=list)
+    daytona_workspace_id: Optional[str] = None
 
 
 # --- Daytona Sandbox Execution Models ---
