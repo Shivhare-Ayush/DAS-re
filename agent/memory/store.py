@@ -6,7 +6,7 @@ import re
 import time
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from core.schemas import IncidentPostmortem, ServiceGraphNode
+from core.schemas import AgentDecisionRecord, AgentRunSummary, IncidentPostmortem, ServiceGraphNode
 
 logger = logging.getLogger(__name__)
 
@@ -251,6 +251,64 @@ class SurrealMemoryStore:
         store = self._fallback_store or MockSurrealMemoryStore()
         return store.save_uncertainty(uncertainty)
 
+    def save_agent_decision(self, decision: AgentDecisionRecord) -> bool:
+        if self._db is not None:
+            from agent.memory.decisions import save_decision
+
+            if self._write_live(lambda db: save_decision(db, decision)):
+                return True
+
+        store = self._fallback_store or MockSurrealMemoryStore()
+        return store.save_agent_decision(decision)
+
+    def save_agent_run_summary(self, summary: AgentRunSummary) -> bool:
+        if self._db is not None:
+            from agent.memory.decisions import save_run
+
+            if self._write_live(lambda db: save_run(db, summary)):
+                return True
+
+        store = self._fallback_store or MockSurrealMemoryStore()
+        return store.save_agent_run_summary(summary)
+
+    def get_agent_runs_for_handover(self, limit: int = 5) -> List[AgentRunSummary]:
+        if self._db is not None:
+            from agent.memory.decisions import fetch_recent_runs
+
+            rows = self._read_live(lambda db: fetch_recent_runs(db, limit))
+            if rows is not None:
+                return rows
+
+        store = self._fallback_store or MockSurrealMemoryStore()
+        return store.get_agent_runs_for_handover(limit)
+
+    def _surreal_call(self, operation):
+        from agent.memory.decisions import run_against_surreal
+        from core.config import get_settings
+
+        settings = get_settings()
+        return run_against_surreal(
+            self.url or settings.SURREALDB_URL,
+            settings.SURREALDB_USER,
+            settings.SURREALDB_PASS,
+            settings.SURREALDB_NS,
+            settings.SURREALDB_DB,
+            operation,
+        )
+
+    def _write_live(self, operation) -> bool:
+        try:
+            self._surreal_call(operation)
+            return True
+        except Exception:
+            return False
+
+    def _read_live(self, operation):
+        try:
+            return self._surreal_call(operation)
+        except Exception:
+            return None
+
 
 class MockSurrealMemoryStore(SurrealMemoryStore):
     """Deterministic In-Memory SurrealDB Simulator loading from mock_data.json."""
@@ -260,6 +318,8 @@ class MockSurrealMemoryStore(SurrealMemoryStore):
         self._data = self._load_data()
         self._db = None
         self._fallback_store = None
+        self._agent_decisions: List[AgentDecisionRecord] = []
+        self._agent_runs: List[AgentRunSummary] = []
 
     def _load_data(self) -> Dict[str, Any]:
         json_path = Path(__file__).parent / "mock_data.json"
@@ -377,3 +437,14 @@ class MockSurrealMemoryStore(SurrealMemoryStore):
         self._data.setdefault("uncertainties", [])
         self._data["uncertainties"].append(uncertainty)
         return True
+
+    def save_agent_decision(self, decision: AgentDecisionRecord) -> bool:
+        self._agent_decisions.append(decision)
+        return True
+
+    def save_agent_run_summary(self, summary: AgentRunSummary) -> bool:
+        self._agent_runs.append(summary)
+        return True
+
+    def get_agent_runs_for_handover(self, limit: int = 5) -> List[AgentRunSummary]:
+        return list(reversed(self._agent_runs[-limit:]))

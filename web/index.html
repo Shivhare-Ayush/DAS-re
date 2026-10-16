@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aegis — Live Incident Demo</title>
+  <style>
+    :root {
+      --bg: #0c0f14;
+      --panel: #151a22;
+      --line: #2a3340;
+      --text: #e7edf5;
+      --muted: #8b98a8;
+      --ok: #3dd68c;
+      --warn: #f5a524;
+      --bad: #ef4444;
+      --accent: #7c9cff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 28px;
+      border-bottom: 1px solid var(--line);
+    }
+    h1 { margin: 0; font-size: 20px; letter-spacing: 0.04em; }
+    .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    button {
+      background: var(--accent);
+      color: #0c0f14;
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-weight: 650;
+      cursor: pointer;
+    }
+    main { padding: 24px 28px 40px; display: grid; gap: 16px; }
+    .grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 16px; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px 18px;
+    }
+    .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+    .voice { font-size: 16px; line-height: 1.45; }
+    .gate {
+      display: grid;
+      grid-template-columns: 180px 110px 1fr;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 14px;
+    }
+    .gate:last-child { border-bottom: 0; }
+    .ok { color: var(--ok); }
+    .bad { color: var(--bad); }
+    .meta { color: var(--muted); font-size: 13px; }
+    @media (max-width: 800px) {
+      .grid, .gate { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>AEGIS LIVE DEMO</h1>
+      <div class="sub">localhost incident run · Arize gates · Surreal handover · Daytona sandbox</div>
+    </div>
+    <button id="run">Run incident</button>
+  </header>
+  <main>
+    <div class="card" id="status">Waiting to run INC-901…</div>
+    <div class="grid">
+      <section class="card">
+        <div class="label">Feedback gates</div>
+        <div id="gates"></div>
+      </section>
+      <section class="card">
+        <div class="label">Voice + sandbox</div>
+        <p class="voice" id="voice"></p>
+        <p class="meta" id="sandbox"></p>
+      </section>
+    </div>
+  </main>
+  <script>
+    const statusEl = document.getElementById("status");
+    const gatesEl = document.getElementById("gates");
+    const voiceEl = document.getElementById("voice");
+    const sandboxEl = document.getElementById("sandbox");
+
+    async function run() {
+      statusEl.textContent = "Running pipeline…";
+      gatesEl.innerHTML = "";
+      const res = await fetch("/api/run", { method: "POST" });
+      const data = await res.json();
+      statusEl.innerHTML = `<strong>${data.pipeline_completed ? "Pipeline complete" : "Pipeline halted"}</strong>
+        <div class="meta">trace ${data.trace_id} · ${data.span_count} spans · ${data.final_action}</div>`;
+      gatesEl.innerHTML = data.decisions.map((d) => `
+        <div class="gate">
+          <div>${d.gate}</div>
+          <div class="${d.continue_pipeline ? "ok" : "bad"}">${d.control_action}</div>
+          <div>${d.reason}</div>
+        </div>`).join("");
+      voiceEl.textContent = data.voice_alert;
+      sandboxEl.textContent = `Daytona ${data.workspace_id} · reproduced ${data.reproduced} · verified ${data.tests_passed}`;
+    }
+
+    document.getElementById("run").onclick = run;
+    run();
+  </script>
+</body>
+</html>

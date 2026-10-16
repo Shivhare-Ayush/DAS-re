@@ -8,6 +8,7 @@ from agent.sandbox.client import MockDaytonaSandboxClient
 from agent.browser.scrapers import MockAnchorReconClient
 from agent.memory.store import MockSurrealMemoryStore
 from agent.orchestrator import AegisOrchestrator
+from agent.evals.tracer import ArizePhoenixTracer
 
 
 @pytest.fixture
@@ -47,4 +48,5 @@ def orchestrator():
         sandbox=MockDaytonaSandboxClient(),
         browser=MockAnchorReconClient(),
         memory=MockSurrealMemoryStore(),
+        tracer=ArizePhoenixTracer(is_mock=True),
     )
