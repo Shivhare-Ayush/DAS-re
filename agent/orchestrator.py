@@ -10,6 +10,7 @@ from core.schemas import (
 )
 from agent.voice.client import ElevenLabsVoiceClient, MockElevenLabsVoiceClient
 from agent.evals.guardrail import ArizeGuardrail, MockArizeGuardrail
+from agent.evals.tracer import ArizePhoenixTracer
 from agent.sandbox.client import DaytonaSandboxClient, MockDaytonaSandboxClient
 from agent.browser.scrapers import AnchorReconClient, MockAnchorReconClient
 from agent.memory.store import SurrealMemoryStore, MockSurrealMemoryStore
@@ -31,12 +32,14 @@ class AegisOrchestrator:
         sandbox: Optional[DaytonaSandboxClient] = None,
         browser: Optional[AnchorReconClient] = None,
         memory: Optional[SurrealMemoryStore] = None,
+        tracer: Optional[ArizePhoenixTracer] = None,
     ):
         self.voice = voice_client or MockElevenLabsVoiceClient()
         self.guardrails = guardrails or MockArizeGuardrail()
         self.sandbox = sandbox or MockDaytonaSandboxClient()
         self.browser = browser or MockAnchorReconClient()
         self.memory = memory or MockSurrealMemoryStore()
+        self.tracer = tracer or ArizePhoenixTracer(is_mock=True)
 
     def handle_incident_alert(self, alert: IncidentAlert) -> Dict[str, Any]:
         """Step 1 & 2: Recons cloud telemetry & matches past postmortems over voice."""
@@ -63,38 +66,56 @@ class AegisOrchestrator:
             "voice_event": voice_event,
         }
 
-    def evaluate_remediation(self, command: str) -> GuardrailEvaluation:
+    def evaluate_remediation(self, command: str, incident_id: str = "INC-901") -> GuardrailEvaluation:
         """Step 3: Intercepts dangerous commands via Arize Phoenix Guardrails."""
-        eval_result = self.guardrails.evaluate_command(command)
-        if eval_result.veto_triggered:
-            veto_speech = GUARDRAIL_VETO_TEMPLATE.format(rule=eval_result.policy_violation)
-            self.voice.synthesize_speech(veto_speech)
-        return eval_result
+        with self.tracer.evaluate_guardrail_span(command, incident_id) as span:
+            eval_result = self.guardrails.evaluate_command(command)
+            self.tracer.record_guardrail_result(span, eval_result)
+            if eval_result.veto_triggered:
+                veto_speech = GUARDRAIL_VETO_TEMPLATE.format(rule=eval_result.policy_violation)
+                self.voice.synthesize_speech(veto_speech)
+            return eval_result
 
     def execute_safe_remediation(
-        self, repo_url: str, file_to_patch: str, patch_code: str
+        self, repo_url: str, file_to_patch: str, patch_code: str, incident_id: str = "INC-901"
     ) -> Dict[str, Any]:
         """Step 4 & 5: Ephemeral Daytona reproduction, surgical patch & clean teardown."""
+        trace_meta = self.tracer.get_active_trace_context()
+
         # 1. Spin up isolated Daytona cloud workspace
         ws = self.sandbox.create_workspace(repo_url)
 
         # 2. Reproduce Defect inside Daytona
-        initial_test = self.sandbox.exec_command(ws.workspace_id, "pytest tests/test_locks.py")
+        with self.tracer.record_daytona_execution(ws.workspace_id, "pytest tests/test_locks.py", incident_id) as span:
+            initial_test = self.sandbox.exec_command(ws.workspace_id, "pytest tests/test_locks.py")
+            self.tracer.complete_daytona_execution(
+                span, initial_test.exit_code, initial_test.stdout, initial_test.duration_ms
+            )
 
         # 3. Apply surgical patch inside Daytona
         self.sandbox.apply_patch(ws.workspace_id, file_to_patch, patch_code)
-        verified_test = self.sandbox.exec_command(ws.workspace_id, "pytest tests/test_locks.py")
+        with self.tracer.record_daytona_execution(
+            ws.workspace_id, "pytest tests/test_locks.py (verified)", incident_id
+        ) as span:
+            verified_test = self.sandbox.exec_command(ws.workspace_id, "pytest tests/test_locks.py")
+            self.tracer.complete_daytona_execution(
+                span, verified_test.exit_code, verified_test.stdout, verified_test.duration_ms
+            )
 
         # 4. Clean Teardown
         self.sandbox.destroy_workspace(ws.workspace_id)
 
-        # 5. Save verified postmortem to SurrealDB
+        # 5. Save verified postmortem with Phoenix trace lineage to SurrealDB
         postmortem = IncidentPostmortem(
-            incident_id="INC-901",
+            incident_id=incident_id,
             service_name="auth-gateway",
             root_cause="Redis lock starvation under peak traffic",
             resolution_diff=patch_code,
             verified_in_daytona=verified_test.passed,
+            phoenix_trace_id=trace_meta.get("phoenix_trace_id"),
+            phoenix_span_id=trace_meta.get("phoenix_span_id"),
+            phoenix_ui_url=trace_meta.get("phoenix_ui_url"),
+            guardrail_verdict="PASS",
         )
         self.memory.save_postmortem(postmortem)
 
@@ -107,6 +128,7 @@ class AegisOrchestrator:
             "reproduced": not initial_test.passed,
             "tests_passed": verified_test.passed,
             "postmortem_saved": True,
+            "phoenix_trace": trace_meta,
             "voice_signoff": signoff,
             "voice_event": voice_event,
         }

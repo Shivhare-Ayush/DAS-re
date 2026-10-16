@@ -88,6 +88,10 @@ class IncidentPostmortem(BaseModel):
     resolution_diff: str
     verified_in_daytona: bool
     embedding: Optional[List[float]] = None
+    phoenix_trace_id: Optional[str] = None
+    phoenix_span_id: Optional[str] = None
+    phoenix_ui_url: Optional[str] = None
+    guardrail_verdict: Optional[str] = None
     timestamp: datetime = Field(default_factory=utc_now)
 
 
