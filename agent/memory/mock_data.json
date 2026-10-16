@@ -57,6 +57,7 @@
       "root_cause": "Redis lock starvation: Critical section in locks.py threw unhandled database blip exception before reaching release() handle, causing locks to remain allocated indefinitely until Redis TTL expired.",
       "resolution_diff": "--- a/src/locks.py\n+++ b/src/locks.py\n@@ -14,5 +14,8 @@\n     def process_critical_section(self, key: str, should_fail: bool = False):\n         self.acquire(key)\n+        try:\n             if should_fail:\n                 raise ValueError(\"Unexpected database network blip during processing\")\n+        finally:\n+            self.release(key)\n",
       "verified_in_daytona": true,
+      "embedding": [0.92, 0.12, 0.05, 0.01, 0.02, 0.22, 0.11, 0.31],
       "date": "2026-09-21T03:14:00Z"
     },
     {
@@ -67,6 +68,7 @@
       "root_cause": "DDL query without lock_timeout caused connection starvation.",
       "resolution_diff": "SET LOCAL lock_timeout = '2s';",
       "verified_in_daytona": true,
+      "embedding": [0.05, 0.88, 0.91, 0.12, 0.01, 0.04, 0.10, 0.02],
       "date": "2026-08-14T11:22:00Z"
     }
   ],
