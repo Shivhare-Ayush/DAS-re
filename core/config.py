@@ -30,6 +30,15 @@ class Settings(BaseSettings):
     SURREALDB_NS: str = Field(default="aegis")
     SURREALDB_DB: str = Field(default="incidents")
 
+    # AWS Bedrock
+    AWS_DEFAULT_REGION: str = Field(default="us-west-2")
+    AWS_REGION: str = Field(default="us-west-2")
+    AWS_ACCESS_KEY_ID: str = Field(default="")
+    AWS_SECRET_ACCESS_KEY: str = Field(default="")
+    AWS_SESSION_TOKEN: str = Field(default="")
+    AWS_BEARER_TOKEN_BEDROCK: str = Field(default="")
+    BEDROCK_MODEL_ID: str = Field(default="anthropic.claude-3-5-sonnet-20240620-v1:0")
+
     # Fallback / Mock Mode for Stage Demo
     IS_MOCK_MODE: bool = Field(default=False)
 
