@@ -49,3 +49,7 @@ DEFINE FIELD service ON uncertainty TYPE string;
 DEFINE FIELD observation ON uncertainty TYPE string;
 DEFINE FIELD verification_step ON uncertainty TYPE string;
 DEFINE FIELD status ON uncertainty TYPE string;
+
+-- Agent continue/terminate trail is additive. Apply schema_agent_trail.surql
+-- after this file. It only adds agent_run, agent_decision, and graph edges
+-- onto shift / postmortem records defined above.

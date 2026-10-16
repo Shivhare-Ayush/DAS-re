@@ -12,7 +12,7 @@ At 2:15 AM on a Saturday, production microservices collapse. PagerDuty is scream
 1. **Wakes the SRE over natural conversational voice** using ultra-low-latency bidirectional streaming (**ElevenLabs**).
 2. **Reconnoiters dynamic web consoles & status dashboards** without API limits using stealth headless cloud browsers (**Anchor Browser**).
 3. **Retrieves past incident topologies and postmortem solutions** using multi-model vector embeddings and dependency graphs (**SurrealDB**).
-4. **Intercepts and evaluates every remediation action** through zero-trust security guardrails and OpenInference tracing to block hallucinated or destructive commands (**Arize AI Phoenix**).
+4. **Intercepts and evaluates every remediation action** through zero-trust security guardrails, **E2E OpenInference traces**, and **continue/terminate feedback gates** that block hallucinated or destructive commands (**Arize AI Phoenix**). Each gate decision is persisted to **SurrealDB** for the next on-call engineer; **Daytona** owns reproduce → patch → verify sandbox phases between gates.
 5. **Ephemerally reproduces the bug, runs tests, and applies code patches** inside 100% isolated, reproducible cloud developer environments (**Daytona**).
 
 ---

@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     AWS_BEARER_TOKEN_BEDROCK: str = Field(default="")
     BEDROCK_MODEL_ID: str = Field(default="anthropic.claude-3-5-sonnet-20240620-v1:0")
 
-    # Fallback / Mock Mode for Stage Demo
+    # Fallback / Mock Mode for Stage Demo. True skips live Phoenix export.
     IS_MOCK_MODE: bool = Field(default=False)
 
     model_config = SettingsConfigDict(

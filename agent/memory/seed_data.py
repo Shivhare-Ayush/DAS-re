@@ -23,7 +23,10 @@ def seed_surrealdb(url="ws://localhost:8000/rpc", user="root", password="root", 
     print(f"[*] Loaded mock data: {len(data['services'])} services, {len(data['shifts'])} shifts, {len(data['postmortems'])} postmortems.")
 
     try:
-        from surrealdb import Surreal
+        try:
+            from surrealdb import AsyncSurreal as Surreal
+        except ImportError:
+            from surrealdb import Surreal
         import asyncio
 
         async def _run_seed():
@@ -55,6 +58,15 @@ def seed_surrealdb(url="ws://localhost:8000/rpc", user="root", password="root", 
                 # 5. Uncertainties
                 for u in data.get("uncertainties", []):
                     await db.create(u["id"], u)
+
+                # 6. Additive agent-trail schema (Arize decisions). Safe if already applied.
+                from agent.memory.decisions import apply_trail_schema
+
+                try:
+                    await apply_trail_schema(db)
+                    print("[*] Applied schema_agent_trail.surql (agent_run, agent_decision, graph edges).")
+                except Exception as trail_error:
+                    print(f"[!] Agent trail schema was not applied ({trail_error}). Partner schema seed still completed.")
 
                 print("[SUCCESS] All records and graph edges seeded into SurrealDB successfully!")
 
